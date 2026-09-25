@@ -8,8 +8,9 @@
 <style>
   :root { --bg:#f4f4f5; --panel:#fff; --text:#18181b; --muted:#71717a; --border:#e4e4e7; --accent:#2563eb; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#0f0f11; --panel:#1a1a1d; --text:#f4f4f5; --muted:#a1a1aa; --border:#2e2e33; --accent:#3b82f6; }
+    :root:not([data-theme="light"]) { --bg:#0f0f11; --panel:#1a1a1d; --text:#f4f4f5; --muted:#a1a1aa; --border:#2e2e33; --accent:#3b82f6; color-scheme:dark; }
   }
+  :root[data-theme="dark"] { --bg:#0f0f11; --panel:#1a1a1d; --text:#f4f4f5; --muted:#a1a1aa; --border:#2e2e33; --accent:#3b82f6; color-scheme:dark; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
   header { padding:16px; border-bottom:1px solid var(--border); background:var(--panel); }
@@ -197,12 +198,25 @@ $('geocode').onclick = async () => {
   $('geocode').disabled = false; $('geocode').textContent = 'Look up address from coordinates';
 };
 
+// Inside a claude.ai artifact, plain download links are blocked, so use the viewer's save prompt there.
+let downloads = null;
+if (window.claude?.use) {
+  $('geocode').hidden = true;
+  claude.use('downloads').then(d => { downloads = d; });
+}
+
 $('download').onclick = () => {
   const type = $('outFmt').value;
-  canvas.toBlob(b => {
+  const name = `${fileName}-stamped.${type === 'image/png' ? 'png' : 'jpg'}`;
+  canvas.toBlob(async b => {
+    if (downloads) {
+      try { await downloads.save({ filename: name, data: b }); status('Saved ' + name + '.'); }
+      catch (e) { if (e?.code !== 'declined') status('Couldn\'t save the image here. Press and hold (or right-click) the photo and choose Save.', true); }
+      return;
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(b);
-    a.download = `${fileName}-stamped.${type === 'image/png' ? 'png' : 'jpg'}`;
+    a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }, type, 0.92);
