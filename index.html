@@ -59,7 +59,7 @@
 
     <details>
       <summary>More options</summary>
-      <label>Extra line under the date (optional, e.g. address)</label>
+      <label>Line under the date (upload time by default; clear it to remove)</label>
       <input id="line2" type="text">
       <button id="geocode" class="secondary" disabled>Look up address from coordinates</button>
 
@@ -87,6 +87,7 @@
 const $ = id => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
 let img = null, meta = { date: null, lat: null, lon: null }, fileName = 'photo';
+let uploadedAt = null;
 
 const status = (msg, warn) => { $('status').textContent = msg; $('status').className = warn ? 'warn' : ''; };
 
@@ -114,7 +115,8 @@ async function load(file) {
   status(msgs.length ? msgs.join(' ') : 'Date and GPS found in metadata.', msgs.length > 0);
 
   fillFields();
-  $('line2').value = '';
+  uploadedAt = new Date();
+  $('line2').value = 'Uploaded ' + fmtDate(uploadedAt);
   $('geocode').disabled = meta.lat == null;
 
   const im = new Image();
@@ -179,7 +181,7 @@ function draw() {
 }
 
 ['left','right1','right2','line2','barColor','textColor','opacity','height'].forEach(id => $(id).addEventListener('input', draw));
-$('reset').onclick = () => { if (img) { fillFields(); draw(); } };
+$('reset').onclick = () => { if (img) { fillFields(); $('line2').value = 'Uploaded ' + fmtDate(uploadedAt); draw(); } };
 const syncLabels = () => { $('opVal').textContent = $('opacity').value + '%'; $('hVal').textContent = $('height').value + '%'; };
 $('opacity').addEventListener('input', syncLabels); $('height').addEventListener('input', syncLabels); syncLabels();
 
