@@ -16,10 +16,10 @@
   header h1 { margin:0; font-size:18px; }
   header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
   main { display:grid; grid-template-columns: 320px 1fr; gap:16px; padding:16px; max-width:1400px; margin:0 auto; }
-  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } .preview { order:-1; } }
   .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }
   label { display:block; font-size:12px; color:var(--muted); margin:12px 0 4px; }
-  input[type=text], input[type=number], select { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:14px; }
+  input[type=text], select { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:14px; }
   input[type=range] { width:100%; }
   input[type=color] { width:100%; height:34px; border:1px solid var(--border); border-radius:6px; background:none; }
   .row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -30,50 +30,50 @@
   #drop.over { border-color:var(--accent); color:var(--accent); }
   #status { font-size:12px; color:var(--muted); margin-top:8px; min-height:16px; }
   #status.warn { color:#d97706; }
+  details { margin-top:12px; }
+  summary { cursor:pointer; font-size:13px; font-weight:600; }
   .preview { display:flex; align-items:center; justify-content:center; min-height:300px; }
-  canvas { max-width:100%; max-height:80vh; height:auto; border-radius:6px; box-shadow:0 2px 12px rgba(0,0,0,.2); }
+  canvas { max-width:100%; max-height:80vh; height:auto; box-shadow:0 2px 12px rgba(0,0,0,.2); }
   .empty { color:var(--muted); }
-  .check { display:flex; align-items:center; gap:8px; font-size:13px; margin-top:12px; color:var(--text); }
 </style>
 </head>
 <body>
 <header>
   <h1>Image Stamper</h1>
-  <p>Add a photo to put a grey bar across the top with its date, time and GPS coordinates from the photo's metadata.</p>
+  <p>Add a photo to stamp a grey bar across the top with its date, time and GPS coordinates from the photo's metadata.</p>
 </header>
 <main>
   <section class="panel">
-    <div id="drop">Click or drop a photo here<input id="file" type="file" accept="image/*" hidden></div>
+    <div id="drop">Tap or drop a photo here<input id="file" type="file" accept="image/*" hidden></div>
     <div id="status"></div>
 
-    <label>Left text (date / time)</label>
+    <label>Date / time (left)</label>
     <input id="left" type="text">
-    <label>Right text (coordinates)</label>
-    <input id="right" type="text">
-    <label>Second line (optional, e.g. address or site name)</label>
-    <input id="line2" type="text" placeholder="">
-    <button id="geocode" class="secondary" disabled>Look up address from coordinates</button>
+    <label>Latitude line (right)</label>
+    <input id="right1" type="text">
+    <label>Longitude line (right)</label>
+    <input id="right2" type="text">
 
-    <div class="row">
-      <div><label>Coordinate format</label>
-        <select id="coordFmt"><option value="dec">Decimal (47.6062, -122.3321)</option><option value="dms">DMS (47°36'22"N)</option></select></div>
-      <div><label>Date format</label>
-        <select id="dateFmt"><option value="us">09/25/2026 3:04 PM</option><option value="iso">2026-09-25 15:04:05</option><option value="long">Sep 25, 2026 15:04</option></select></div>
-    </div>
-
-    <div class="row">
-      <div><label>Bar colour</label><input id="barColor" type="color" value="#3a3a3a"></div>
-      <div><label>Text colour</label><input id="textColor" type="color" value="#ffffff"></div>
-    </div>
-    <label>Bar opacity: <span id="opVal"></span></label>
-    <input id="opacity" type="range" min="0" max="100" value="70">
-    <label>Bar height (% of image height): <span id="hVal"></span></label>
-    <input id="height" type="range" min="3" max="20" step="0.5" value="6">
-    <label class="check"><input id="bold" type="checkbox" checked> Bold text</label>
-
-    <label>Save as</label>
-    <select id="outFmt"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option></select>
     <button id="download" disabled>Download stamped image</button>
+
+    <details>
+      <summary>More options</summary>
+      <label>Extra line under the date (optional, e.g. address)</label>
+      <input id="line2" type="text">
+      <button id="geocode" class="secondary" disabled>Look up address from coordinates</button>
+
+      <div class="row">
+        <div><label>Bar colour</label><input id="barColor" type="color" value="#262626"></div>
+        <div><label>Text colour</label><input id="textColor" type="color" value="#e8e8e8"></div>
+      </div>
+      <label>Bar opacity: <span id="opVal"></span></label>
+      <input id="opacity" type="range" min="0" max="100" value="62">
+      <label>Bar size (% of image width): <span id="hVal"></span></label>
+      <input id="height" type="range" min="4" max="16" step="0.5" value="8">
+      <label>Save as</label>
+      <select id="outFmt"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option></select>
+      <button id="reset" class="secondary">Reset text from photo metadata</button>
+    </details>
   </section>
 
   <section class="panel preview">
@@ -108,41 +108,33 @@ async function load(file) {
   } catch (err) { console.warn(err); }
 
   const msgs = [];
-  if (!meta.date) { meta.date = new Date(file.lastModified); msgs.push('No capture date in metadata, so the file date is used instead.'); }
-  if (meta.lat == null) msgs.push('No GPS data in this photo. Type the coordinates in by hand. (On iPhone, turn on "Location" in the share options before sending.)');
+  if (!(meta.date instanceof Date) || isNaN(meta.date)) { meta.date = new Date(file.lastModified); msgs.push('No capture date in metadata, so the file date is used instead.'); }
+  if (meta.lat == null) msgs.push('No GPS data in this photo. Type the coordinates in by hand. (On iPhone, tap Options and turn on "Location" before sharing the photo.)');
   status(msgs.length ? msgs.join(' ') : 'Date and GPS found in metadata.', msgs.length > 0);
 
   fillFields();
   $('line2').value = '';
   $('geocode').disabled = meta.lat == null;
 
-  const url = URL.createObjectURL(file);
   const im = new Image();
   im.onload = () => { img = im; $('canvas').hidden = false; $('empty').hidden = true; $('download').disabled = false; draw(); };
   im.onerror = () => status('This browser can\'t display this file type. HEIC works in Safari; otherwise convert the photo to JPG first.', true);
-  im.src = url;
+  im.src = URL.createObjectURL(file);
 }
 
-function pad(n) { return String(n).padStart(2, '0'); }
+const pad = n => String(n).padStart(2, '0');
+// e.g. "11/01/2025 04:47 AM PDT"
 function fmtDate(d) {
-  if (!(d instanceof Date) || isNaN(d)) return '';
-  const f = $('dateFmt').value;
-  if (f === 'iso') return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  if (f === 'long') return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  let h = d.getHours() % 12 || 12;
-  return `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${d.getFullYear()} ${h}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
+  const h = d.getHours() % 12 || 12;
+  let tz = '';
+  try { tz = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(d).find(p => p.type === 'timeZoneName').value; } catch {}
+  return `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(h)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'} ${tz}`.trim();
 }
-function dms(v, pos, neg) {
-  const a = Math.abs(v), d = Math.floor(a), mf = (a - d) * 60, m = Math.floor(mf), s = ((mf - m) * 60).toFixed(1);
-  return `${d}°${m}'${s}"${v >= 0 ? pos : neg}`;
+function fillFields() {
+  $('left').value = fmtDate(meta.date);
+  $('right1').value = meta.lat == null ? 'lat ' : `lat ${meta.lat}`;
+  $('right2').value = meta.lon == null ? 'lng ' : `lng ${meta.lon}`;
 }
-function fmtCoords() {
-  if (meta.lat == null) return '';
-  return $('coordFmt').value === 'dms'
-    ? `${dms(meta.lat, 'N', 'S')} ${dms(meta.lon, 'E', 'W')}`
-    : `${meta.lat.toFixed(6)}, ${meta.lon.toFixed(6)}`;
-}
-function fillFields() { $('left').value = fmtDate(meta.date); $('right').value = fmtCoords(); }
 
 function draw() {
   if (!img) return;
@@ -150,39 +142,43 @@ function draw() {
   canvas.width = W; canvas.height = H;
   ctx.drawImage(img, 0, 0, W, H);
 
-  const hasLine2 = $('line2').value.trim() !== '';
-  const barH = Math.round(H * (+$('height').value / 100) * (hasLine2 ? 1.7 : 1));
+  // Proportions measured from the reference stamp: bar ≈ 8% of width,
+  // text ≈ 2.6% of width, two right-aligned coordinate lines.
+  const unit = W * (+$('height').value / 100);
+  const extra = $('line2').value.trim();
+  const barH = Math.round(unit * (extra ? 1.35 : 1));
   ctx.globalAlpha = +$('opacity').value / 100;
   ctx.fillStyle = $('barColor').value;
   ctx.fillRect(0, 0, W, barH);
   ctx.globalAlpha = 1;
 
-  const unit = H * (+$('height').value / 100);
-  let size = Math.round(unit * 0.5);
-  const weight = $('bold').checked ? '600' : '400';
-  const pad = Math.round(W * 0.02);
-  const left = $('left').value, right = $('right').value;
-  const setFont = s => ctx.font = `${weight} ${s}px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+  let size = unit * 0.33;
+  const setFont = s => ctx.font = `400 ${s}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  const left = $('left').value, r1 = $('right1').value, r2 = $('right2').value;
+  const padL = W * 0.013, padR = W * 0.004;
   setFont(size);
-  // Shrink the text if the left and right text would overlap.
-  while (size > 8 && ctx.measureText(left).width + ctx.measureText(right).width + pad * 3 > W) { size--; setFont(size); }
+  const fits = () => ctx.measureText(left).width + Math.max(ctx.measureText(r1).width, ctx.measureText(r2).width) + padL * 3 < W;
+  while (size > 6 && !fits()) { size *= 0.95; setFont(size); }
 
   ctx.fillStyle = $('textColor').value;
   ctx.textBaseline = 'middle';
-  const y1 = hasLine2 ? unit * 0.55 : barH / 2;
-  ctx.textAlign = 'left';  ctx.fillText(left, pad, y1);
-  ctx.textAlign = 'right'; ctx.fillText(right, W - pad, y1);
+  const y1 = unit * 0.35, y2 = unit * 0.71;
+  ctx.textAlign = 'right';
+  ctx.fillText(r1, W - padR, y1);
+  ctx.fillText(r2, W - padR, y2);
+  ctx.textAlign = 'left';
+  ctx.fillText(left, padL, unit * 0.5);
 
-  if (hasLine2) {
-    let s2 = Math.round(size * 0.85); setFont(s2);
-    const t = $('line2').value;
-    while (s2 > 8 && ctx.measureText(t).width + pad * 2 > W) { s2--; setFont(s2); }
-    ctx.textAlign = 'left'; ctx.fillText(t, pad, unit * 1.25);
+  if (extra) {
+    let s2 = size * 0.85; setFont(s2);
+    const maxW = W - padL * 2 - Math.max(ctx.measureText(r1).width, ctx.measureText(r2).width);
+    while (s2 > 6 && ctx.measureText(extra).width > maxW) { s2 *= 0.95; setFont(s2); }
+    ctx.fillText(extra, padL, unit * 1.05);
   }
 }
 
-['left','right','line2','barColor','textColor','opacity','height','bold'].forEach(id => $(id).addEventListener('input', draw));
-['coordFmt','dateFmt'].forEach(id => $(id).addEventListener('change', () => { fillFields(); draw(); }));
+['left','right1','right2','line2','barColor','textColor','opacity','height'].forEach(id => $(id).addEventListener('input', draw));
+$('reset').onclick = () => { if (img) { fillFields(); draw(); } };
 const syncLabels = () => { $('opVal').textContent = $('opacity').value + '%'; $('hVal').textContent = $('height').value + '%'; };
 $('opacity').addEventListener('input', syncLabels); $('height').addEventListener('input', syncLabels); syncLabels();
 
