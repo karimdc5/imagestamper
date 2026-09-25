@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Image Stamper</title>
-<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
+<!-- Reads GPS/date metadata. Local copy first; CDN as a fallback if the local file is missing. -->
+<script src="exifr.min.js"></script>
+<script>window.exifr || document.write('<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"><\/script>');</script>
 <style>
   :root { --bg:#f4f4f5; --panel:#fff; --text:#18181b; --muted:#71717a; --border:#e4e4e7; --accent:#2563eb; }
   @media (prefers-color-scheme: dark) {
@@ -101,7 +103,8 @@ async function load(file) {
   fileName = file.name.replace(/\.[^.]+$/, '');
   meta = { date: null, lat: null, lon: null };
   status('Reading metadata…');
-  try {
+  if (!window.exifr) { status('The metadata reader didn\'t load, so GPS can\'t be read. Check your connection and reload the page.', true); }
+  else try {
     const data = await exifr.parse(file, { gps: true, tiff: true, exif: true });
     if (data) {
       meta.date = data.DateTimeOriginal || data.CreateDate || data.ModifyDate || null;
@@ -111,7 +114,7 @@ async function load(file) {
 
   const msgs = [];
   if (meta.lat == null) msgs.push('No GPS data in this photo. Type the coordinates in by hand. (On iPhone, tap Options and turn on "Location" before sharing the photo.)');
-  status(msgs.length ? msgs.join(' ') : 'GPS found in metadata.', msgs.length > 0);
+  if (window.exifr) status(msgs.length ? msgs.join(' ') : 'GPS found in metadata.', msgs.length > 0);
 
   uploadedAt = new Date();
   fillFields();
