@@ -48,7 +48,7 @@
     <div id="drop">Tap or drop a photo here<input id="file" type="file" accept="image/*" hidden></div>
     <div id="status"></div>
 
-    <label>Date / time (left)</label>
+    <label>Date / time (left, set to when you add the photo)</label>
     <input id="left" type="text">
     <label>Latitude line (right)</label>
     <input id="right1" type="text">
@@ -59,7 +59,7 @@
 
     <details>
       <summary>More options</summary>
-      <label>Line under the date (upload time by default; clear it to remove)</label>
+      <label>Extra line under the date (optional, e.g. address)</label>
       <input id="line2" type="text">
       <button id="geocode" class="secondary" disabled>Look up address from coordinates</button>
 
@@ -110,13 +110,12 @@ async function load(file) {
   } catch (err) { console.warn(err); }
 
   const msgs = [];
-  if (!(meta.date instanceof Date) || isNaN(meta.date)) { meta.date = new Date(file.lastModified); msgs.push('No capture date in metadata, so the file date is used instead.'); }
   if (meta.lat == null) msgs.push('No GPS data in this photo. Type the coordinates in by hand. (On iPhone, tap Options and turn on "Location" before sharing the photo.)');
-  status(msgs.length ? msgs.join(' ') : 'Date and GPS found in metadata.', msgs.length > 0);
+  status(msgs.length ? msgs.join(' ') : 'GPS found in metadata.', msgs.length > 0);
 
-  fillFields();
   uploadedAt = new Date();
-  $('line2').value = 'Uploaded ' + fmtDate(uploadedAt);
+  fillFields();
+  $('line2').value = '';
   $('geocode').disabled = meta.lat == null;
 
   const im = new Image();
@@ -134,7 +133,7 @@ function fmtDate(d) {
   return `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(h)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'} ${tz}`.trim();
 }
 function fillFields() {
-  $('left').value = fmtDate(meta.date);
+  $('left').value = fmtDate(uploadedAt);
   $('right1').value = meta.lat == null ? 'lat ' : `lat ${meta.lat}`;
   $('right2').value = meta.lon == null ? 'lng ' : `lng ${meta.lon}`;
 }
@@ -181,7 +180,7 @@ function draw() {
 }
 
 ['left','right1','right2','line2','barColor','textColor','opacity','height'].forEach(id => $(id).addEventListener('input', draw));
-$('reset').onclick = () => { if (img) { fillFields(); $('line2').value = 'Uploaded ' + fmtDate(uploadedAt); draw(); } };
+$('reset').onclick = () => { if (img) { fillFields(); draw(); } };
 const syncLabels = () => { $('opVal').textContent = $('opacity').value + '%'; $('hVal').textContent = $('height').value + '%'; };
 $('opacity').addEventListener('input', syncLabels); $('height').addEventListener('input', syncLabels); syncLabels();
 
