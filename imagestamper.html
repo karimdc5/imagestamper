@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Stamper</title>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
+<style>
+  :root { --bg:#f4f4f5; --panel:#fff; --text:#18181b; --muted:#71717a; --border:#e4e4e7; --accent:#2563eb; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#0f0f11; --panel:#1a1a1d; --text:#f4f4f5; --muted:#a1a1aa; --border:#2e2e33; --accent:#3b82f6; color-scheme:dark; }
+  }
+  :root[data-theme="dark"] { --bg:#0f0f11; --panel:#1a1a1d; --text:#f4f4f5; --muted:#a1a1aa; --border:#2e2e33; --accent:#3b82f6; color-scheme:dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px; border-bottom:1px solid var(--border); background:var(--panel); }
+  header h1 { margin:0; font-size:18px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  main { display:grid; grid-template-columns: 320px 1fr; gap:16px; padding:16px; max-width:1400px; margin:0 auto; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } .preview { order:-1; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:12px 0 4px; }
+  input[type=text], select { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:14px; }
+  input[type=range] { width:100%; }
+  input[type=color] { width:100%; height:34px; border:1px solid var(--border); border-radius:6px; background:none; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  button { padding:10px 12px; border:0; border-radius:6px; background:var(--accent); color:#fff; font-size:14px; font-weight:600; cursor:pointer; width:100%; margin-top:8px; }
+  button.secondary { background:transparent; color:var(--text); border:1px solid var(--border); }
+  button:disabled { opacity:.5; cursor:default; }
+  #drop { border:2px dashed var(--border); border-radius:10px; padding:24px; text-align:center; cursor:pointer; color:var(--muted); }
+  #drop.over { border-color:var(--accent); color:var(--accent); }
+  #status { font-size:12px; color:var(--muted); margin-top:8px; min-height:16px; }
+  #status.warn { color:#d97706; }
+  details { margin-top:12px; }
+  summary { cursor:pointer; font-size:13px; font-weight:600; }
+  .preview { display:flex; align-items:center; justify-content:center; min-height:300px; }
+  canvas { max-width:100%; max-height:80vh; height:auto; box-shadow:0 2px 12px rgba(0,0,0,.2); }
+  .empty { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Image Stamper</h1>
+  <p>Add a photo to stamp a grey bar across the top with its date, time and GPS coordinates from the photo's metadata.</p>
+</header>
+<main>
+  <section class="panel">
+    <div id="drop">Tap or drop a photo here<input id="file" type="file" accept="image/*" hidden></div>
+    <div id="status"></div>
+
+    <label>Date / time (left, set to when you add the photo)</label>
+    <input id="left" type="text">
+    <label>Latitude line (right)</label>
+    <input id="right1" type="text">
+    <label>Longitude line (right)</label>
+    <input id="right2" type="text">
+
+    <button id="download" disabled>Download stamped image</button>
+
+    <details>
+      <summary>More options</summary>
+      <label>Extra line under the date (optional, e.g. address)</label>
+      <input id="line2" type="text">
+      <button id="geocode" class="secondary" disabled>Look up address from coordinates</button>
+
+      <div class="row">
+        <div><label>Bar colour</label><input id="barColor" type="color" value="#262626"></div>
+        <div><label>Text colour</label><input id="textColor" type="color" value="#e8e8e8"></div>
+      </div>
+      <label>Bar opacity: <span id="opVal"></span></label>
+      <input id="opacity" type="range" min="0" max="100" value="62">
+      <label>Bar size (% of image width): <span id="hVal"></span></label>
+      <input id="height" type="range" min="4" max="16" step="0.5" value="8">
+      <label>Save as</label>
+      <select id="outFmt"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option></select>
+      <button id="reset" class="secondary">Reset text from photo metadata</button>
+    </details>
+  </section>
+
+  <section class="panel preview">
+    <canvas id="canvas" hidden></canvas>
+    <div id="empty" class="empty">Your stamped photo will show here.</div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const canvas = $('canvas'), ctx = canvas.getContext('2d');
+let img = null, meta = { date: null, lat: null, lon: null }, fileName = 'photo';
+let uploadedAt = null;
+
+const status = (msg, warn) => { $('status').textContent = msg; $('status').className = warn ? 'warn' : ''; };
+
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => e.target.files[0] && load(e.target.files[0]);
+['dragover','dragenter'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
+['dragleave','drop'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
+$('drop').addEventListener('drop', e => e.dataTransfer.files[0] && load(e.dataTransfer.files[0]));
+
+async function load(file) {
+  fileName = file.name.replace(/\.[^.]+$/, '');
+  meta = { date: null, lat: null, lon: null };
+  status('Reading metadata…');
+  try {
+    const data = await exifr.parse(file, { gps: true, tiff: true, exif: true });
+    if (data) {
+      meta.date = data.DateTimeOriginal || data.CreateDate || data.ModifyDate || null;
+      if (typeof data.latitude === 'number' && typeof data.longitude === 'number') { meta.lat = data.latitude; meta.lon = data.longitude; }
+    }
+  } catch (err) { console.warn(err); }
+
+  const msgs = [];
+  if (meta.lat == null) msgs.push('No GPS data in this photo. Type the coordinates in by hand. (On iPhone, tap Options and turn on "Location" before sharing the photo.)');
+  status(msgs.length ? msgs.join(' ') : 'GPS found in metadata.', msgs.length > 0);
+
+  uploadedAt = new Date();
+  fillFields();
+  $('line2').value = '';
+  $('geocode').disabled = meta.lat == null;
+
+  const im = new Image();
+  im.onload = () => { img = im; $('canvas').hidden = false; $('empty').hidden = true; $('download').disabled = false; draw(); };
+  im.onerror = () => status('This browser can\'t display this file type. HEIC works in Safari; otherwise convert the photo to JPG first.', true);
+  im.src = URL.createObjectURL(file);
+}
+
+const pad = n => String(n).padStart(2, '0');
+// e.g. "11/01/2025 04:47 AM PDT"
+function fmtDate(d) {
+  const h = d.getHours() % 12 || 12;
+  let tz = '';
+  try { tz = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(d).find(p => p.type === 'timeZoneName').value; } catch {}
+  return `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(h)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'} ${tz}`.trim();
+}
+function fillFields() {
+  $('left').value = fmtDate(uploadedAt);
+  $('right1').value = meta.lat == null ? 'lat ' : `lat ${meta.lat}`;
+  $('right2').value = meta.lon == null ? 'lng ' : `lng ${meta.lon}`;
+}
+
+function draw() {
+  if (!img) return;
+  const W = img.naturalWidth, H = img.naturalHeight;
+  canvas.width = W; canvas.height = H;
+  ctx.drawImage(img, 0, 0, W, H);
+
+  // Proportions measured from the reference stamp: bar ≈ 8% of width,
+  // text ≈ 2.6% of width, two right-aligned coordinate lines.
+  const unit = W * (+$('height').value / 100);
+  const extra = $('line2').value.trim();
+  const barH = Math.round(unit * (extra ? 1.35 : 1));
+  ctx.globalAlpha = +$('opacity').value / 100;
+  ctx.fillStyle = $('barColor').value;
+  ctx.fillRect(0, 0, W, barH);
+  ctx.globalAlpha = 1;
+
+  let size = unit * 0.33;
+  const setFont = s => ctx.font = `400 ${s}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  const left = $('left').value, r1 = $('right1').value, r2 = $('right2').value;
+  const padL = W * 0.013, padR = W * 0.004;
+  setFont(size);
+  const fits = () => ctx.measureText(left).width + Math.max(ctx.measureText(r1).width, ctx.measureText(r2).width) + padL * 3 < W;
+  while (size > 6 && !fits()) { size *= 0.95; setFont(size); }
+
+  ctx.fillStyle = $('textColor').value;
+  ctx.textBaseline = 'middle';
+  const y1 = unit * 0.35, y2 = unit * 0.71;
+  ctx.textAlign = 'right';
+  ctx.fillText(r1, W - padR, y1);
+  ctx.fillText(r2, W - padR, y2);
+  ctx.textAlign = 'left';
+  ctx.fillText(left, padL, unit * 0.5);
+
+  if (extra) {
+    let s2 = size * 0.85; setFont(s2);
+    const maxW = W - padL * 2 - Math.max(ctx.measureText(r1).width, ctx.measureText(r2).width);
+    while (s2 > 6 && ctx.measureText(extra).width > maxW) { s2 *= 0.95; setFont(s2); }
+    ctx.fillText(extra, padL, unit * 1.05);
+  }
+}
+
+['left','right1','right2','line2','barColor','textColor','opacity','height'].forEach(id => $(id).addEventListener('input', draw));
+$('reset').onclick = () => { if (img) { fillFields(); draw(); } };
+const syncLabels = () => { $('opVal').textContent = $('opacity').value + '%'; $('hVal').textContent = $('height').value + '%'; };
+$('opacity').addEventListener('input', syncLabels); $('height').addEventListener('input', syncLabels); syncLabels();
+
+$('geocode').onclick = async () => {
+  if (meta.lat == null) return;
+  $('geocode').disabled = true; $('geocode').textContent = 'Looking up…';
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${meta.lat}&lon=${meta.lon}&zoom=18&addressdetails=1`);
+    const j = await r.json();
+    const a = j.address || {};
+    const street = [a.house_number, a.road].filter(Boolean).join(' ');
+    const city = a.city || a.town || a.village || a.suburb || '';
+    $('line2').value = [street, city, a.state].filter(Boolean).join(', ') || j.display_name || '';
+    draw();
+  } catch { status('Address lookup failed. Type the address in by hand.', true); }
+  $('geocode').disabled = false; $('geocode').textContent = 'Look up address from coordinates';
+};
+
+// Inside a claude.ai artifact, plain download links are blocked, so use the viewer's save prompt there.
+let downloads = null;
+if (window.claude?.use) {
+  $('geocode').hidden = true;
+  claude.use('downloads').then(d => { downloads = d; });
+}
+
+$('download').onclick = () => {
+  const type = $('outFmt').value;
+  const name = `${fileName}-stamped.${type === 'image/png' ? 'png' : 'jpg'}`;
+  canvas.toBlob(async b => {
+    if (downloads) {
+      try { await downloads.save({ filename: name, data: b }); status('Saved ' + name + '.'); }
+      catch (e) { if (e?.code !== 'declined') status('Couldn\'t save the image here. Press and hold (or right-click) the photo and choose Save.', true); }
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }, type, 0.92);
+};
+</script>
+</body>
+</html>
